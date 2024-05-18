@@ -6,12 +6,14 @@
 #         print(hashed.hexdigest())
 
 
-from flask import Flask,jsonify,request
+from flask import Flask,jsonify,request,render_template,render_template_string
 import os
 import datetime
+
+import rsa.key
 app= Flask(__name__)
 import pymongo
-from dotenv import load_dotenv,dotenv_values
+from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 # from pymongo.server_api import ServerApi
 # from cryptography.fernet import Fernet
@@ -27,6 +29,15 @@ db=client[os.getenv('DB_NAME')]
 collectionandroid=db[os.getenv('COLLECTION_NAME1')]
 collectiontoken=db[os.getenv('COLLECTION_NAME2')]
 
+# privateKey=rsa.key.PrivateKey(os.getenv('PRIVATE_KEY_N'),os.getenv('PRIVATE_KEY_P'),os.getenv('PRIVATE_KEY_K'),os.getenv('PRIVATE_KEY_E'),os.getenv('PRIVATE_KEY_L'))
+# publicKey=rsa.key.PublicKey(os.getenv('PUBLIC_KEY_N'),os.getenv('PUBLIC_KEY_P'))
+
+private_key_pem=base64.b64decode(os.getenv('PRIVATE_KEY')).decode('utf-8')
+public_key_pem=base64.b64decode(os.getenv('PUBLIC_KEY')).decode('utf-8')
+
+
+privateKey=rsa.PrivateKey.load_pkcs1(private_key_pem.encode('utf-8'))
+publicKey=rsa.key.PublicKey.load_pkcs1(public_key_pem.encode('utf-8'))
 
 
 try:
@@ -99,7 +110,9 @@ except Exception as e:
 #         print("Document retrieval failed:", e)
 
 
-
+@app.route('/')
+def default():
+    return render_template_string("""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Welcome To Weboauth API</title></head><body><h3>Please Make request of server side</h3></body></html>""")
 @app.route('/upload',methods=['GET'])
 def post_upload():
         data={
@@ -126,15 +139,15 @@ def get_data():
             data=dict(result)
             # genrateAccessToken(data)
             time=str(int(datetime.datetime.utcnow().timestamp())+30000)
-            weboauth_url=data.get('_id')
-            token=(weboauth_url+"$"+time+"$"+data.get("redirect_url")).encode('ASCII')
+            appid=data.get('_id')
+            token=(appid+"$"+time+"$"+data.get("redirect_url")).encode('ASCII')
             cipher = rsa.encrypt(token, publicKey)
             base64Text = base64.b64encode(cipher).decode()
             data['accessToken']=base64Text
             print(data)
             try:
                 collectiontoken.insert_one({'token':base64Text})
-                return data
+                return jsonify(data=data)
             except pymongo.errors.WriteError as e:
                 print("Document insertion failed:", e)
                 return False
@@ -164,13 +177,11 @@ def get_data():
 #     '_id':'s2fd56wff31'
 # }
 
-privateKey=rsa.key.PrivateKey(7587312699188860924676781532146918575939057770410210951116836398204515474978363609689786219334393896768383157793015320920292955260624113834822137985270727, 65537, 1834629970002378489606679538885396320748680111809979293259509992864289739340363314862220455748778605772054939688710664305854904491597658045354888324668169, 5353236419143575549061381287557169746363882761856136414797653862316005264102608403, 1417331891424795061001257925698140522299291715848479451031757915333171709)
-publicKey=rsa.key.PublicKey(7587312699188860924676781532146918575939057770410210951116836398204515474978363609689786219334393896768383157793015320920292955260624113834822137985270727, 65537)
 
 def genrateAccessToken(data):
     time=str(int(datetime.datetime.utcnow().timestamp())+30000)
-    weboauth_url=data.get('_id')
-    token=(weboauth_url+"$"+time+"$"+data.get("redirect_url")).encode('ASCII')
+    appid=data.get('_id')
+    token=(appid+"$"+time+"$"+data.get("redirect_url")).encode('ASCII')
     cipher = rsa.encrypt(token, publicKey)
     base64Text = base64.b64encode(cipher).decode()
     data['accessToken']=base64Text
@@ -209,4 +220,4 @@ def validateToken():
     return {'time':time,'redirect':redirect}
 
 if __name__ == '__main__':
-    app.run(port=3000)
+    app.run()
