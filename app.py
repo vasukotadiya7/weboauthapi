@@ -19,7 +19,9 @@ from pymongo.mongo_client import MongoClient
 # from cryptography.fernet import Fernet
 import base64
 import rsa
-
+import binascii
+from flask_cors import CORS
+CORS(app, origins="http://localhost:5173")
 load_dotenv()
 # uri = "mongodb+srv://vasukotadiya224:ZnbujRS3Vm5sHJSz@cluster0.baqiyze.mongodb.net/oauth?retryWrites=true&w=majority&appName=Cluster0"
 uri=os.getenv('MONGODB_URL')
@@ -28,6 +30,7 @@ client = MongoClient(uri)
 db=client[os.getenv('DB_NAME')]
 collectionandroid=db[os.getenv('COLLECTION_NAME1')]
 collectiontoken=db[os.getenv('COLLECTION_NAME2')]
+collectionutoken=db[os.getenv('COLLECTION_NAME3')]
 
 # privateKey=rsa.key.PrivateKey(os.getenv('PRIVATE_KEY_N'),os.getenv('PRIVATE_KEY_P'),os.getenv('PRIVATE_KEY_K'),os.getenv('PRIVATE_KEY_E'),os.getenv('PRIVATE_KEY_L'))
 # publicKey=rsa.key.PublicKey(os.getenv('PUBLIC_KEY_N'),os.getenv('PUBLIC_KEY_P'))
@@ -80,7 +83,13 @@ try:
         print("Collection already exists")
     
     try:
-        db.create_collection("token", validator={"$jsonSchema": schema2})
+        db.create_collection("Atoken", validator={"$jsonSchema": schema2})
+        print("Collection created with schema validation")
+    except pymongo.errors.CollectionInvalid:
+        print("Collection already exists")
+        
+    try:
+        db.create_collection("Utoken", validator={"$jsonSchema": schema2})
         print("Collection created with schema validation")
     except pymongo.errors.CollectionInvalid:
         print("Collection already exists")
@@ -142,7 +151,7 @@ def get_data():
             appid=data.get('_id')
             token=(appid+"$"+time+"$"+data.get("redirect_url")).encode('ASCII')
             cipher = rsa.encrypt(token, publicKey)
-            base64Text = base64.b64encode(cipher).decode()
+            base64Text = base64.urlsafe_b64encode(cipher).decode()
             data['accessToken']=base64Text
             print(data)
             try:
@@ -183,7 +192,7 @@ def genrateAccessToken(data):
     appid=data.get('_id')
     token=(appid+"$"+time+"$"+data.get("redirect_url")).encode('ASCII')
     cipher = rsa.encrypt(token, publicKey)
-    base64Text = base64.b64encode(cipher).decode()
+    base64Text = base64.urlsafe_b64encode(cipher).decode()
     data['accessToken']=base64Text
     print(data)
     return data
@@ -195,7 +204,7 @@ def genrateAccessToken(data):
     #     return False
     
 # genrateAccessToken(data)
-@app.route('/validatetoken',methods=['GET'])
+@app.route('/validatetoken',methods=['POST'])
 def validateToken():
     # try:
     #     x=collectiontoken.find({'token':accessToken})
@@ -204,20 +213,87 @@ def validateToken():
     # except pymongo.errors.PyMongoError as e:
     #     print("Document retrieval failed:", e)
     #     return e
-    accessToken=request.headers.get('accessToken')
+    # accessToken=request.headers.get('Access-Token')
+    token=request.json
+    
+    accessToken=token.get('accesstoken')
+    print(accessToken)
+    if accessToken is None:
+        return jsonify({"message":"ACCESS TOKEN NOT FOUND"})
+    
+    # accessToken=request.args.get('accesstoken')
     try:
-        text = rsa.decrypt(base64.b64decode(accessToken.encode()), privateKey)
+        text = rsa.decrypt(base64.urlsafe_b64decode(accessToken.encode()), privateKey)
     except rsa.pkcs1.DecryptionError as e:
         print("invalid token decryption failed")
-        return "INVALID TOKEN"  
+        return jsonify({"message":"INVALID TOKEN"})
+
+    except binascii.Error as e1:
+        return jsonify({"message":"INVALID TOKEN"})
     print(text.decode())
     token=text.decode()
     token=token.split("$")
     appid,time,redirect=token[0],token[1],token[2]
     time=int(time)
     if(datetime.datetime.utcnow().timestamp()>time):
-        return "Timed Out"
-    return {'time':time,'redirect':redirect}
+        return jsonify({"message":"Timed Out"})
+    return jsonify({'time':time,'redirect':redirect}),200
+
+
+@app.route('/getusertoken',methods=['GET'])
+def get_udata():
+    uid=request.headers.get('userid')
+    # genrateAccessToken(data)
+    time=str(int(datetime.datetime.utcnow().timestamp())+30000)
+    token=(time+"$"+uid).encode('ASCII')
+    cipher = rsa.encrypt(token, publicKey)
+    base64Text = base64.urlsafe_b64encode(cipher).decode()
+    data={"userToken":base64Text}
+    print(data)
+    try:
+        collectiontoken.insert_one({'token':base64Text})
+        return jsonify(data)
+    except pymongo.errors.WriteError as e:
+        print("Document insertion failed:", e)
+        return False
+    # return data
+
+@app.route('/validateutoken',methods=['GET'])
+def validateUToken():
+    # try:
+    #     x=collectiontoken.find({'token':accessToken})
+    #     if(x==None):
+    #         return "Invalid Token"
+    # except pymongo.errors.PyMongoError as e:
+    #     print("Document retrieval failed:", e)
+    #     return e
+    # accessToken=request.headers.get('Access-Token')
+    token=request.json
+    
+    userToken=token.get('usertoken')
+    print(userToken)
+    if userToken is None:
+        return jsonify({"message":"USER TOKEN NOT FOUND"})
+    
+    # accessToken=request.args.get('accesstoken')
+    try:
+        text = rsa.decrypt(base64.urlsafe_b64decode(userToken.encode()), privateKey)
+    except rsa.pkcs1.DecryptionError as e:
+        print("invalid token decryption failed")
+        return jsonify({"message":"INVALID TOKEN"})
+
+    except binascii.Error as e1:
+        return jsonify({"message":"INVALID TOKEN"})
+    print(text.decode())
+    token=text.decode()
+    token=token.split("$")
+    time,uid=token[0],token[1]
+    time=int(time)
+    if(datetime.datetime.utcnow().timestamp()>time):
+        return jsonify({"message":"Timed Out"})
+    return jsonify({'time':time,'uid':uid}),200
+
+
 
 if __name__ == '__main__':
     app.run()
