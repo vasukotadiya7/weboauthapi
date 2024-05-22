@@ -156,7 +156,7 @@ def get_data():
             print(data)
             try:
                 collectiontoken.insert_one({'token':base64Text})
-                return jsonify(data=data)
+                return jsonify(data)
             except pymongo.errors.WriteError as e:
                 print("Document insertion failed:", e)
                 return False
