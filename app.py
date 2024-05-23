@@ -21,7 +21,7 @@ import base64
 import rsa
 import binascii
 from flask_cors import CORS
-CORS(app, origins="http://localhost:5173")
+CORS(app)
 load_dotenv()
 # uri = "mongodb+srv://vasukotadiya224:ZnbujRS3Vm5sHJSz@cluster0.baqiyze.mongodb.net/oauth?retryWrites=true&w=majority&appName=Cluster0"
 uri=os.getenv('MONGODB_URL')
