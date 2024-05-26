@@ -118,10 +118,10 @@ except Exception as e:
 #     except pymongo.errors.PyMongoError as e:
 #         print("Document retrieval failed:", e)
 
+# @app.route('/')
+# def default():
+#     return render_template_string("""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Welcome To Weboauth API</title></head><body><h3>Please Make request of server side</h3></body></html>""")
 
-@app.route('/')
-def default():
-    return render_template_string("""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Welcome To Weboauth API</title></head><body><h3>Please Make request of server side</h3></body></html>""")
 @app.route('/upload',methods=['GET'])
 def post_upload():
         data={
@@ -240,9 +240,10 @@ def validateToken():
     return jsonify({'time':time,'redirect':redirect}),200
 
 
-@app.route('/getusertoken',methods=['GET'])
+@app.route('/getusertoken',methods=['POST'])
 def get_udata():
-    uid=request.headers.get('userid')
+    token=request.json
+    uid=token.get('uid')
     # genrateAccessToken(data)
     time=str(int(datetime.datetime.utcnow().timestamp())+30000)
     token=(time+"$"+uid).encode('ASCII')
@@ -251,11 +252,15 @@ def get_udata():
     data={"userToken":base64Text}
     print(data)
     try:
-        collectiontoken.insert_one({'token':base64Text})
+        collectionutoken.insert_one({'token':base64Text})
         return jsonify(data)
     except pymongo.errors.WriteError as e:
         print("Document insertion failed:", e)
-        return False
+        return jsonify({"message":"Something went Wrong!"})
+    except Exception as e2:
+        print("Another exception occured")
+        return jsonify({"message":"Something went Wrong!"})
+        
     # return data
 
 @app.route('/validateutoken',methods=['GET'])
@@ -268,9 +273,9 @@ def validateUToken():
     #     print("Document retrieval failed:", e)
     #     return e
     # accessToken=request.headers.get('Access-Token')
-    token=request.json
+
     
-    userToken=token.get('usertoken')
+    userToken=request.headers.get('usertoken')
     print(userToken)
     if userToken is None:
         return jsonify({"message":"USER TOKEN NOT FOUND"})
@@ -284,6 +289,8 @@ def validateUToken():
 
     except binascii.Error as e1:
         return jsonify({"message":"INVALID TOKEN"})
+    except Exception:
+        return jsonify({"message":"Something went Wrong!"})
     print(text.decode())
     token=text.decode()
     token=token.split("$")
